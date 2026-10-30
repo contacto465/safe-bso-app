@@ -26,9 +26,7 @@ formas de pago, métodos de pago y tarifas, oficinas, usuarios y reglas del nego
 3. **Authentication → Providers → Email:** desactiva *Allow new users to sign up* (nadie se registra solo).
 4. **Authentication → Multi-Factor:** activa *TOTP (App Authenticator)*.
 5. **Authentication → URL Configuration:** *Site URL* = la dirección final de la app (ej. `https://app.safebsomigration.com`).
-6. **Authentication → Email Templates → Invite user**, cambia el enlace por:
-   `{{ .SiteURL }}/auth/confirmar?token_hash={{ .TokenHash }}&type=invite`
-   y en **Reset password**: `{{ .SiteURL }}/auth/confirmar?token_hash={{ .TokenHash }}&type=recovery`
+6. *(Opcional)* Las plantillas de correo solo se pueden editar con un servidor SMTP propio. No es necesario: la app procesa el enlace de la plantilla estándar de Supabase.
 7. **Authentication → Users → Add user → Send invitation** a tu correo, y ejecuta `supabase/primer_administrador.sql`.
 
 ### 2. Publicación (Netlify)

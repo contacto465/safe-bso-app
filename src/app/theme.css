@@ -1,0 +1,25 @@
+/* Identidad visual de SAFE BSO MIGRATION.
+   Valores PROVISIONALES: se reemplazan cuando Mauro entregue colores, tipografía y logo (pregunta 5).
+   Cambiar solo este archivo actualiza toda la aplicación. */
+:root {
+  --marca-primario: #0e2a3f;      /* barra lateral, botones principales */
+  --marca-primario-hover: #1f4a6b;
+  --marca-acento: #f2b544;        /* insignias, selección */
+  --marca-texto-sobre-primario: #ffffff;
+  --marca-fuente: 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --fondo: #eef1f4;
+  --superficie: #ffffff;
+  --superficie-2: #f5f7f9;
+  --texto: #14202b;
+  --texto-suave: #5b6673;
+  --borde: #dde3e9;
+  --ok: #1b7f4b;
+  --ok-fondo: #eaf5ee;
+  --alerta: #8a5a00;
+  --alerta-fondo: #fff4db;
+  --peligro: #b42318;
+  --peligro-fondo: #fde4e1;
+  --info: #1f5f96;
+  --info-fondo: #e6f0fa;
+}

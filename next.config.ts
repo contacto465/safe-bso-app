@@ -1,9 +1,8 @@
 import type { NextConfig } from "next";
 
+// App interna con sesión: todas las páginas son dinámicas (dependen del usuario),
+// por eso no se usa cacheComponents.
 const nextConfig: NextConfig = {
-  /* config options here */
-  cacheComponents: true,
-  partialPrefetching: true,
   turbopack: {
     rules: {
       "*.css": {
@@ -11,6 +10,9 @@ const nextConfig: NextConfig = {
         as: "*.css",
       },
     },
+  },
+  experimental: {
+    serverActions: { bodySizeLimit: "5mb" },
   },
 };
 

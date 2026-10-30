@@ -1,26 +1,42 @@
 @import "tailwindcss";
-
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@import "./theme.css";
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-marca: var(--marca-primario);
+  --color-marca-hover: var(--marca-primario-hover);
+  --color-acento: var(--marca-acento);
+  --color-fondo: var(--fondo);
+  --color-superficie: var(--superficie);
+  --color-superficie-2: var(--superficie-2);
+  --color-texto: var(--texto);
+  --color-suave: var(--texto-suave);
+  --color-borde: var(--borde);
+  --color-ok: var(--ok);
+  --color-ok-fondo: var(--ok-fondo);
+  --color-alerta: var(--alerta);
+  --color-alerta-fondo: var(--alerta-fondo);
+  --color-peligro: var(--peligro);
+  --color-peligro-fondo: var(--peligro-fondo);
+  --color-info: var(--info);
+  --color-info-fondo: var(--info-fondo);
+  --font-sans: var(--marca-fuente);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+html, body { background: var(--fondo); color: var(--texto); }
+body { font-family: var(--marca-fuente); font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased; }
+:focus-visible { outline: 2px solid var(--marca-acento); outline-offset: 2px; }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@utility campo {
+  @apply w-full rounded-lg border border-borde bg-superficie px-3 py-2 text-sm text-texto placeholder:text-suave/70
+         focus:border-marca focus:outline-none focus:ring-2 focus:ring-marca/15 disabled:bg-superficie-2;
+  min-height: 40px;
 }
+@utility etiqueta { @apply mb-1 block text-xs font-bold uppercase tracking-wide text-suave; }
+@utility btn { @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-50; }
+@utility btn-primario { @apply btn bg-marca text-white hover:bg-marca-hover; }
+@utility btn-secundario { @apply btn border border-borde bg-superficie text-texto hover:bg-superficie-2; }
+@utility btn-peligro { @apply btn border border-peligro/30 bg-superficie text-peligro hover:bg-peligro-fondo; }
+@utility tarjeta { @apply rounded-2xl bg-superficie p-5; }
+.tabla { @apply w-full border-collapse text-sm; }
+.tabla th { @apply px-3 py-2 text-left text-xs font-bold uppercase tracking-wide text-suave; }
+.tabla td { @apply border-t border-borde px-3 py-2.5 align-top; }

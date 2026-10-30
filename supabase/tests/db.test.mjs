@@ -153,17 +153,18 @@ await t('abreviatura con minúsculas o repetida se rechaza', async () => {
 });
 
 console.log('Consecutivos');
-await t('BOG-303-VA el 30 de octubre, y -02 si se repite el mismo día', async () => {
+await t('BOG-303-VA-MARIAC: oficina, día juliano, servicio y cliente', async () => {
+  const c = (of, ab, n, a, f) => `select app.siguiente_consecutivo('${of}','${ab}','${n}','${a}','${f}') c`;
   const r = await como(U.mauro, async (tx) => [
-    (await tx.query(`select app.siguiente_consecutivo($1,'VA','2026-10-30') c`, [BOG])).rows[0].c,
-    (await tx.query(`select app.siguiente_consecutivo($1,'VA','2026-10-30') c`, [BOG])).rows[0].c,
-    (await tx.query(`select app.siguiente_consecutivo($1,'VA','2026-10-30') c`, [BAQ])).rows[0].c,
-    (await tx.query(`select app.siguiente_consecutivo($1,'VA','2026-01-05') c`, [BOG])).rows[0].c]);
-  assert.deepEqual(r, ['BOG-303-VA', 'BOG-303-VA-02', 'BAQ-303-VA', 'BOG-005-VA']);
+    (await tx.query(c(BOG, 'VA', 'María José', 'Castro Díaz', '2026-10-30'))).rows[0].c,
+    (await tx.query(c(BOG, 'VA', 'Maria', 'Castro', '2026-10-30'))).rows[0].c,
+    (await tx.query(c(BOG, 'VA', 'Ñusta', 'Ávila', '2026-10-30'))).rows[0].c,
+    (await tx.query(c(BAQ, 'VA', 'María', 'Castro', '2026-10-30'))).rows[0].c,
+    (await tx.query(c(BOG, 'VA', 'María', 'Castro', '2026-01-05'))).rows[0].c]);
+  assert.deepEqual(r, ['BOG-303-VA-MARIAC', 'BOG-303-VA-MARIAC-02', 'BOG-303-VA-NUSTAA', 'BAQ-303-VA-MARIAC', 'BOG-005-VA-MARIAC']);
 });
 await t('la usuaria de Barranquilla no puede numerar en Bogotá', () =>
-  falla(como(U.baq, (tx) => tx.query(`select app.siguiente_consecutivo($1,'VA')`, [BOG])), /No tienes acceso/));
-
+  falla(como(U.baq, (tx) => tx.query(`select app.siguiente_consecutivo($1,'VA','Ana','Ruiz')`, [BOG])), /No tienes acceso/));
 
 console.log('Guardado atómico de servicios');
 await t('guardar_servicio crea servicio con costos, adicionales y precio por oficina', async () => {

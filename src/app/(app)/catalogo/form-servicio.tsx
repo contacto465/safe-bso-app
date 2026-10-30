@@ -35,9 +35,6 @@ export function FormServicio(p: Props) {
   const [formaPago, setFormaPago] = useState(s?.forma_pago_id ?? '');
   const [costos, setCostos] = useState<CostoServicio[]>(p.costos.length ? p.costos : [{ tipo: 'fijo', concepto: '', valor: 0 }]);
   const [adicionales, setAdicionales] = useState<string[]>(p.adicionalesSel);
-  const [preciosOf, setPreciosOf] = useState<Record<string, string>>(
-    Object.fromEntries(p.oficinas.map((o) => [o.id, String(p.preciosOficina.find((x) => x.oficina_id === o.id)?.precio ?? '')])),
-  );
   const [medioSim, setMedioSim] = useState<string>(p.medios.find((m) => m.comision_pct > 0)?.id ?? p.medios[0]?.id ?? '');
   const [margenObj, setMargenObj] = useState('40');
 
@@ -71,7 +68,7 @@ export function FormServicio(p: Props) {
     id: s?.id, tipo, moneda, precio: Number(precio) || 0, iva_pct: ivaNum, forma_pago_id: formaPago || undefined,
     costos: costos.filter((c) => c.concepto.trim()),
     adicionales: tipo === 'principal' ? adicionales : [],
-    precios_oficina: p.oficinas.map((o) => ({ oficina_id: o.id, precio: preciosOf[o.id] === '' ? '' : Number(preciosOf[o.id]) })),
+    precios_oficina: [], // precios iguales en todas las oficinas
   };
 
   return (
@@ -116,7 +113,7 @@ export function FormServicio(p: Props) {
             <label className="etiqueta" htmlFor="abreviatura">Abreviatura</label>
             <input id="abreviatura" name="abreviatura" defaultValue={s?.abreviatura} required maxLength={6}
               className="campo uppercase" placeholder="VA" aria-describedby="abrev-ayuda" />
-            <p id="abrev-ayuda" className="mt-1 text-xs text-suave">Va en el consecutivo: BOG-303-<b>VA</b></p>
+            <p id="abrev-ayuda" className="mt-1 text-xs text-suave">Va en el consecutivo: BOG-303-<b>VA</b>-MARIAC</p>
             {err('abreviatura')}
           </div>
           <div className="sm:col-span-2">
@@ -168,20 +165,6 @@ export function FormServicio(p: Props) {
             <div className="sm:col-span-3">
               <label className="etiqueta" htmlFor="beneficiario">Beneficiario (embajada o entidad)</label>
               <input id="beneficiario" name="beneficiario" defaultValue={s?.beneficiario ?? ''} className="campo" placeholder="Embajada de los Estados Unidos" />
-            </div>
-          )}
-          {p.oficinas.length > 1 && !esTercero && (
-            <div className="sm:col-span-3">
-              <p className="etiqueta">Precio distinto por oficina (opcional)</p>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {p.oficinas.map((o) => (
-                  <div key={o.id}>
-                    <label className="mb-1 block text-xs text-suave" htmlFor={`po-${o.id}`}>{o.nombre}</label>
-                    <input id={`po-${o.id}`} type="number" min="0" step="any" placeholder="Usa el precio general" value={preciosOf[o.id]}
-                      onChange={(e) => setPreciosOf({ ...preciosOf, [o.id]: e.target.value })} className="campo" />
-                  </div>
-                ))}
-              </div>
             </div>
           )}
         </section>

@@ -18,7 +18,7 @@ export default async function Oficinas() {
   return (
     <>
       <Encabezado titulo="Oficinas y empresa"
-        descripcion="Las dos sedes facturan con el mismo NIT, pero cada una ve solo su información. El código de la oficina es el inicio del consecutivo (BOG-303-VA)." />
+        descripcion="Las dos sedes facturan con el mismo NIT, pero cada una ve solo su información. El código de la oficina es el inicio del consecutivo (BOG-303-VA-MARIAC)." />
       <div className="grid gap-5 xl:grid-cols-2">
         {empresa && (
           <section className="tarjeta space-y-3">

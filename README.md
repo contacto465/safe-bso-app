@@ -60,7 +60,7 @@ npm run build
 
 ## Fases
 1. ✅ Catálogo, costos, IVA, formas y métodos de pago, oficinas, usuarios, reglas, auditoría, carga masiva
-2. Clientes, empresas, cotizaciones y prefacturas (consecutivo BOG-303-VA, vigencia 3 días, PDF), contratos
+2. Clientes, empresas, cotizaciones y prefacturas (consecutivo BOG-303-VA-MARIAC, vigencia 3 días, PDF), contratos
 3. Ventas, abonos y cartera, pagos a embajadas, fondo 10%, devoluciones, paz y salvo, factura electrónica
 4. Gastos, proveedores, caja menor, acreedores, deudores, préstamos, conciliación, calendario tributario
 5. Seguimiento, alertas, correos, satisfacción y referidos

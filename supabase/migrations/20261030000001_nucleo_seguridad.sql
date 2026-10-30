@@ -294,9 +294,9 @@ grant execute on all functions in schema app to authenticated;
 -- =====================================================================
 insert into public.empresa (razon_social) values ('SAFE BSO MIGRATION');
 
-insert into public.oficinas (codigo, nombre, ciudad, direccion, es_principal) values
-  ('BOG', 'Bogotá – Connecta 26', 'Bogotá', 'Connecta 26', true),
-  ('BAQ', 'Barranquilla – Américas III', 'Barranquilla', 'Américas III', false);
+insert into public.oficinas (codigo, nombre, ciudad, direccion, telefono, es_principal) values
+  ('BOG', 'Bogotá – Connecta 26', 'Bogotá', 'Centro Empresarial Connecta 26, Av. Calle 26 #92-32', '+57 324 249 2396', true),
+  ('BAQ', 'Barranquilla – Américas III', 'Barranquilla', 'Las Américas III', null, false);
 
 insert into public.configuracion (clave, valor, descripcion) values
   ('max_usuarios',             '3',  'Máximo de usuarios activos en la aplicación'),

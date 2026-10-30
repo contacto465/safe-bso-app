@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 
 // Rutas que no exigen sesión
-const PUBLICAS = ['/ingreso', '/auth'];
+const PUBLICAS = ['/ingreso', '/auth', '/c/'];
 // Rutas que exigen sesión pero no la verificación en dos pasos completa
 const SIN_2FA = ['/verificacion'];
 

@@ -40,3 +40,8 @@ body { font-family: var(--marca-fuente); font-variant-numeric: tabular-nums; -we
 .tabla { @apply w-full border-collapse text-sm; }
 .tabla th { @apply px-3 py-2 text-left text-xs font-bold uppercase tracking-wide text-suave; }
 .tabla td { @apply border-t border-borde px-3 py-2.5 align-top; }
+
+@media print {
+  body { background: #fff; }
+  @page { margin: 14mm; }
+}

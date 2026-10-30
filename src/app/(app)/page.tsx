@@ -35,7 +35,7 @@ export default async function Inicio({ searchParams }: { searchParams: Promise<{
     <>
       <Encabezado
         titulo={`Hola, ${s.perfil.nombre.split(' ')[0]}`}
-        descripcion="Fase 1 en funcionamiento: catálogo, formas y métodos de pago, oficinas, usuarios y reglas. Los demás módulos se irán activando por fases; en el menú se ve la fase de cada uno (F2, F3…)."
+        descripcion="En funcionamiento: clientes, empresas, cotizaciones y la configuración (catálogo, formas y métodos de pago, oficinas, usuarios y reglas). Los módulos en gris se irán activando por fases (F3, F4…)."
       />
       <div className="space-y-5">
         {aviso && AVISOS[aviso] && <Aviso tipo="alerta">{AVISOS[aviso]}</Aviso>}

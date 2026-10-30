@@ -19,8 +19,8 @@ await db.exec(`
     $$ select nullif(nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub', '')::uuid $$;
   create function auth.jwt() returns jsonb language sql stable as
     $$ select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb $$;
-  grant usage on schema public, auth to authenticated;
-  grant execute on all functions in schema auth to authenticated;
+  grant usage on schema public, auth to authenticated, anon;
+  grant execute on all functions in schema auth to authenticated, anon;
   alter default privileges in schema public grant all on tables to authenticated;
   alter default privileges in schema public grant all on sequences to authenticated;
 `);
@@ -189,5 +189,108 @@ await t('si algo falla no queda nada a medias', async () => {
 });
 await t('un no administrador no puede usar guardar_servicio', () =>
   falla(como(U.baq, (tx) => tx.query(`select guardar_servicio('{"tipo":"principal","nombre":"X","abreviatura":"XX"}'::jsonb)`)), /Solo los administradores/));
+
+
+console.log('Clientes y cotizaciones (fase 2)');
+let cli, cliBaq, cot, token;
+await t('crear clientes por oficina; Barranquilla no ve los de Bogotá', async () => {
+  cli = await como(U.mauro, async (tx) => (await tx.query(`insert into clientes (oficina_id, nombres, apellidos) values ($1,'María José','Castro') returning id`, [BOG])).rows[0].id);
+  cliBaq = await como(U.baq, async (tx) => (await tx.query(`insert into clientes (oficina_id, nombres, apellidos) values ($1,'Jorge','Díaz') returning id`, [BAQ])).rows[0].id);
+  const r = await como(U.baq, (tx) => tx.query('select nombres from clientes'));
+  assert.deepEqual(r.rows.map((x) => x.nombres), ['Jorge']);
+  await falla(como(U.baq, (tx) => tx.query(`insert into clientes (oficina_id, nombres, apellidos) values ($1,'X','Y')`, [BOG])), /row-level security/);
+});
+await t('cotización con principal, adicional y tercero en USD: consecutivo, totales y cronograma', async () => {
+  cot = await como(U.mauro, async (tx) => {
+    const ids = Object.fromEntries((await tx.query(`select abreviatura, id from servicios`)).rows.map((x) => [x.abreviatura, x.id]));
+    const fp = (await tx.query(`select id from formas_pago where nombre like '50%%'`)).rows[0].id;
+    await tx.query(`update servicios set forma_pago_id=$1 where abreviatura='VA'`, [fp]);
+    return (await tx.query(`select guardar_cotizacion($1::jsonb) id`, [JSON.stringify({
+      oficina_id: BOG, cliente_id: cli, tasas: { USD: 4000 },
+      items: [
+        { servicio_id: ids.TR, cantidad: 2, descuento_tipo: 'valor', descuento_valor: 16000 },
+        { servicio_id: ids.VA, descuento_tipo: 'pct', descuento_valor: 10 },
+        { servicio_id: ids.MRV },
+      ] })])).rows[0].id;
+  });
+  const c = (await db.query(`select * from cotizaciones where id=$1`, [cot])).rows[0];
+  token = c.token_publico;
+  const doy = (await db.query(`select lpad(extract(doy from app.hoy())::text,3,'0') d`)).rows[0].d;
+  assert.match(c.consecutivo, new RegExp(`^BOG-${doy}-VA-MARIAC(-\\d{2})?$`));
+  // VA 1.190.000 -10% = 1.071.000; TR 2×80.000=160.000 -16.000 = 144.000; MRV 185 USD×4000=740.000 + recargo 20×4000=80.000
+  assert.equal(Number(c.subtotal_honorarios), 1190000 + 160000 + 80000);
+  assert.equal(Number(c.descuento_total), 119000 + 16000);
+  assert.equal(Number(c.total_terceros), 740000);
+  assert.equal(Number(c.total), 1071000 + 144000 + 80000 + 740000);
+  assert.equal(c.estado, 'borrador');
+  assert.equal(c.cronograma.length, 2);
+  assert.equal(c.cronograma[0].valor + c.cronograma[1].valor, Number(c.total));
+  assert.equal(Number(c.tope_descuento_pct), 30);
+});
+await t('descuento por encima del 30% se bloquea', () =>
+  falla(como(U.mauro, async (tx) => {
+    const va = (await tx.query(`select id from servicios where abreviatura='VA'`)).rows[0].id;
+    await tx.query(`select guardar_cotizacion($1::jsonb)`, [JSON.stringify({ oficina_id: BOG, cliente_id: cli, items: [{ servicio_id: va, descuento_valor: 31 }] })]);
+  }), /supera el máximo/));
+await t('empresa: tope del 40%', async () => {
+  const id = await como(U.mauro, async (tx) => {
+    const e = (await tx.query(`insert into empresas (oficina_id, razon_social) values ($1,'Acme Global SAS') returning id`, [BOG])).rows[0].id;
+    const c2 = (await tx.query(`insert into clientes (oficina_id, nombres, apellidos, empresa_id) values ($1,'Luis','Pérez',$2) returning id`, [BOG, e])).rows[0].id;
+    const va = (await tx.query(`select id from servicios where abreviatura='VA'`)).rows[0].id;
+    return (await tx.query(`select guardar_cotizacion($1::jsonb) id`, [JSON.stringify({ oficina_id: BOG, cliente_id: c2, a_nombre_de_empresa: true, items: [{ servicio_id: va, descuento_valor: 40 }] })])).rows[0].id;
+  });
+  const c = (await db.query(`select consecutivo, descuento_pct, tope_descuento_pct from cotizaciones where id=$1`, [id])).rows[0];
+  assert.equal(Number(c.descuento_pct), 40);
+  assert.match(c.consecutivo, /-VA-ACMEG$/);
+});
+await t('falta TRM para un ítem en dólares → error claro', () =>
+  falla(como(U.mauro, async (tx) => {
+    const mrv = (await tx.query(`select id from servicios where abreviatura='MRV'`)).rows[0].id;
+    await tx.query(`select guardar_cotizacion($1::jsonb)`, [JSON.stringify({ oficina_id: BOG, cliente_id: cli, items: [{ servicio_id: mrv }] })]);
+  }), /TRM/));
+await t('Barranquilla no puede cotizar para un cliente de Bogotá ni ver su cotización', async () => {
+  await falla(como(U.baq, (tx) => tx.query(`select guardar_cotizacion($1::jsonb)`, [JSON.stringify({ oficina_id: BOG, cliente_id: cli, items: [] })])), /No tienes acceso/);
+  const r = await como(U.baq, (tx) => tx.query('select id from cotizaciones'));
+  assert.equal(r.rows.length, 0);
+});
+await t('borrador no es visible por el enlace público; enviada sí, sin datos internos', async () => {
+  const antes = await db.query(`select cotizacion_publica($1) j`, [token]);
+  assert.equal(antes.rows[0].j, null);
+  await como(U.mauro, (tx) => tx.query(`select enviar_cotizacion($1)`, [cot]));
+  const pub = await db.transaction(async (tx) => { await tx.exec('set local role anon'); return (await tx.query(`select cotizacion_publica($1) j`, [token])).rows[0].j; });
+  assert.equal(pub.vigente, true);
+  assert.equal(pub.items.length, 3);
+  assert.ok(!JSON.stringify(pub).includes('costo'));
+});
+await t('el cliente sin sesión no puede leer tablas, solo usar su enlace', async () => {
+  await falla(db.transaction(async (tx) => { await tx.exec('set local role anon'); await tx.query('select * from cotizaciones'); }));
+});
+await t('editar una enviada crea versión nueva y vuelve a borrador', async () => {
+  await como(U.mauro, async (tx) => {
+    const va = (await tx.query(`select id from servicios where abreviatura='VA'`)).rows[0].id;
+    await tx.query(`select guardar_cotizacion($1::jsonb)`, [JSON.stringify({ id: cot, oficina_id: BOG, cliente_id: cli, tasas: { USD: 4000 }, items: [{ servicio_id: va }] })]);
+  });
+  const c = (await db.query(`select version, estado, consecutivo from cotizaciones where id=$1`, [cot])).rows[0];
+  assert.equal(c.version, 2); assert.equal(c.estado, 'borrador');
+  assert.equal((await db.query(`select count(*)::int n from cotizacion_versiones where cotizacion_id=$1`, [cot])).rows[0].n, 1);
+});
+await t('vencida: se actualiza sola pero NO se envía; el cliente no puede aceptarla', async () => {
+  await como(U.mauro, (tx) => tx.query(`select enviar_cotizacion($1)`, [cot]));
+  await db.query(`update servicios set precio = 1300000 where abreviatura='VA'`);
+  await db.query(`update cotizaciones set fecha_vencimiento = app.hoy() - 1 where id=$1`, [cot]);
+  await falla(db.query(`select responder_cotizacion($1,'aceptar')`, [token]), /venció/);
+  const n = (await db.query(`select app.actualizar_vencidas() n`)).rows[0].n;
+  assert.equal(n, 1);
+  const c = (await db.query(`select estado, version, total from cotizaciones where id=$1`, [cot])).rows[0];
+  assert.equal(c.estado, 'por_reenviar'); assert.equal(c.version, 3); assert.equal(Number(c.total), 1300000);
+  const pub = (await db.query(`select cotizacion_publica($1) j`, [token])).rows[0].j;
+  assert.equal(pub.vigente, false);
+});
+await t('Reenviar → vigente de nuevo y el cliente la acepta', async () => {
+  await como(U.mauro, (tx) => tx.query(`select enviar_cotizacion($1)`, [cot]));
+  const r = await db.transaction(async (tx) => { await tx.exec('set local role anon'); return (await tx.query(`select responder_cotizacion($1,'aceptar','¡Listo!') r`, [token])).rows[0].r; });
+  assert.equal(r, 'aceptada');
+  await falla(como(U.mauro, (tx) => tx.query(`select guardar_cotizacion($1::jsonb)`, [JSON.stringify({ id: cot, oficina_id: BOG, cliente_id: cli, items: [{ servicio_id: '00000000-0000-0000-0000-000000000000' }] })])), /no se puede editar/);
+});
 
 console.log(`\n${ok} pruebas superadas`);

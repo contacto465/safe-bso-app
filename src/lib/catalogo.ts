@@ -8,6 +8,7 @@ export type Servicio = {
   abreviatura: string;
   descripcion: string | null;
   incluye: string | null;
+  tiempo_estimado?: string | null;
   categoria_id: string | null;
   moneda: string;
   precio: number;

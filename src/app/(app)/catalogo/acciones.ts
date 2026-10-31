@@ -14,6 +14,7 @@ const esquema = z.object({
   abreviatura: z.string().trim().toUpperCase().regex(/^[A-Z0-9]{1,6}$/, 'Abreviatura: de 1 a 6 letras o números, sin espacios (ej. VA)'),
   descripcion: z.string().optional(),
   incluye: z.string().optional(),
+  tiempo_estimado: z.string().optional(),
   categoria_id: z.string().optional(),
   moneda: z.enum(['COP', 'USD', 'CAD', 'EUR']),
   precio: num,

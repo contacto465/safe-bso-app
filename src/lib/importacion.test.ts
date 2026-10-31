@@ -56,3 +56,25 @@ test('celdas numéricas de Excel', () => {
   assert.deepEqual(f[0].errores, []);
   assert.equal(f[0].forma_pago_cuotas?.length, 1);
 });
+
+test('ficha de costeo vertical: un servicio por columna', () => {
+  const hoja = [
+    ['Catálogo'], ['Comisión (%)', '', 3], [],
+    ['CONCEPTO', 'CÓMO LLENARLO', 'VA (ejemplo)', 'Servicio 2', 'Servicio 3'],
+    ['1. DATOS DEL SERVICIO'],
+    ['Tipo', '', 'principal', 'tercero', ''], ['Nombre del servicio', '', 'Visa Americana', 'Tarifa MRV', ''],
+    ['Abreviatura', '', 'VA', 'MRV', ''], ['Tiempo estimado', '', '6 semanas', '', ''], ['Moneda', '', 'COP', 'USD', ''],
+    ['Forma de pago', '', '50% al aceptar + 50% a 30 días', '', ''], ['Aplica a (adicionales y terceros)', '', '', 'VA', ''],
+    ['2. COSTOS FIJOS (no dependen del caso)'], ['Honorarios del asesor', '', 100000, null, null], ['Otro costo fijo', '', null, null, null],
+    ['3. COSTOS VARIABLES (cambian con cada caso)'], ['Mensajería: DHL', '', 15000, null, null],
+    ['4. PRECIO Y RESULTADO'], ['Precio al cliente (con IVA)', '', 1190000, 185, null], ['IVA (%)', '', 19, 0, null],
+    ['5. CÁLCULOS AUTOMÁTICOS'], ['Valor antes de IVA', 'Fórmula', 1000000, 185, null], ['IVA incluido', 'Fórmula', 190000, 0, null],
+  ];
+  const f = interpretarFilas(hoja);
+  assert.equal(f.length, 2);
+  assert.deepEqual(f.map((x) => x.errores), [[], []]);
+  assert.equal(f[0].tiempo_estimado, '6 semanas');
+  assert.equal(f[0].iva, 19);
+  assert.deepEqual(f[0].costos, [{ tipo: 'fijo', concepto: 'Honorarios del asesor', valor: 100000 }, { tipo: 'variable', concepto: 'Mensajería  DHL', valor: 15000 }]);
+  assert.equal(f[1].tipo, 'tercero'); assert.equal(f[1].iva, 0); assert.deepEqual(f[1].aplica_a, ['VA']);
+});

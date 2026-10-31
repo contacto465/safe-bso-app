@@ -74,7 +74,7 @@ export function FormServicio(p: Props) {
   return (
     <form
       action={(fd) => {
-        const base = Object.fromEntries(['nombre', 'abreviatura', 'descripcion', 'incluye', 'categoria_id', 'beneficiario', 'recargo_gestion'].map((k) => [k, String(fd.get(k) ?? '')]));
+        const base = Object.fromEntries(['nombre', 'abreviatura', 'descripcion', 'incluye', 'tiempo_estimado', 'categoria_id', 'beneficiario', 'recargo_gestion'].map((k) => [k, String(fd.get(k) ?? '')]));
         const completo = new FormData();
         completo.set('datos', JSON.stringify({
           ...datos, ...base,
@@ -123,6 +123,10 @@ export function FormServicio(p: Props) {
           <div className="sm:col-span-2">
             <label className="etiqueta" htmlFor="incluye">Qué incluye (sale en la cotización)</label>
             <textarea id="incluye" name="incluye" defaultValue={s?.incluye ?? ''} rows={3} className="campo" placeholder="Una línea por cada punto" />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="etiqueta" htmlFor="tiempo_estimado">Tiempo estimado</label>
+            <input id="tiempo_estimado" name="tiempo_estimado" defaultValue={s?.tiempo_estimado ?? ''} className="campo" placeholder="Ej.: 8 a 12 semanas" />
           </div>
           <div>
             <label className="etiqueta" htmlFor="categoria_id">Categoría</label>

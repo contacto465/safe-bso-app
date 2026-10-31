@@ -3,7 +3,7 @@
 
 export const COLUMNAS = [
   'tipo', 'nombre', 'abreviatura', 'categoria', 'descripcion', 'incluye', 'moneda', 'precio', 'iva',
-  'forma_pago', 'costos_fijos', 'costos_variables', 'aplica_a', 'beneficiario', 'recargo_gestion',
+  'forma_pago', 'costos_fijos', 'costos_variables', 'aplica_a', 'beneficiario', 'recargo_gestion', 'tiempo_estimado',
 ] as const;
 
 export const PLANTILLA_CSV = [
@@ -21,6 +21,7 @@ export type FilaImportada = {
   categoria: string;
   descripcion: string;
   incluye: string;
+  tiempo_estimado: string;
   moneda: string;
   precio: number;
   iva: number;
@@ -110,10 +111,51 @@ function leerCostos(v: string, tipo: 'fijo' | 'variable', errores: string[]) {
   });
 }
 
+// Ficha de costeo vertical (plantilla de Excel): conceptos en filas y un servicio por columna.
+// Se convierte al formato horizontal (una fila por servicio).
+const ROTULOS: [RegExp, (typeof COLUMNAS)[number]][] = [
+  [/^tipo$/, 'tipo'], [/^nombre/, 'nombre'], [/^abreviatura/, 'abreviatura'], [/^categoria/, 'categoria'],
+  [/^descripcion/, 'descripcion'], [/^(que )?incluye/, 'incluye'], [/^tiempo/, 'tiempo_estimado'], [/^moneda/, 'moneda'],
+  [/^forma de pago/, 'forma_pago'], [/^aplica a/, 'aplica_a'], [/^beneficiario/, 'beneficiario'], [/^recargo/, 'recargo_gestion'],
+  [/^precio al cliente/, 'precio'], [/^iva \(%\)$|^iva$|^iva %$/, 'iva'],
+];
+export function desdeFichaVertical(filas: string[][]): string[][] | null {
+  const n = (x: string) => sinTildes(x ?? '');
+  const hdr = filas.findIndex((f) => n(f[0]) === 'concepto');
+  if (hdr < 0 || !filas.some((f) => n(f[0]).startsWith('abreviatura'))) return null;
+  const ancho = Math.max(...filas.map((f) => f.length));
+  const cols = Array.from({ length: Math.max(0, ancho - 2) }, (_, k) => k + 2);
+  const datos = cols.map(() => ({} as Record<string, string>));
+  const costos = cols.map(() => ({ fijo: [] as string[], variable: [] as string[] }));
+  let seccion: 'fijo' | 'variable' | null = null;
+  for (const f of filas.slice(hdr + 1)) {
+    const rot = n(f[0]);
+    if (/^\d+\.\s/.test(rot)) { seccion = rot.includes('fijo') ? 'fijo' : rot.includes('variable') ? 'variable' : null; continue; }
+    if (!rot) continue;
+    if (seccion) {
+      const concepto = (f[0] ?? '').replace(/[:|]/g, ' ').trim();
+      cols.forEach((c, k) => { const v = leerNumero(f[c] ?? ''); if (Number.isFinite(v) && v > 0) costos[k][seccion!].push(`${concepto}:${v}`); });
+      continue;
+    }
+    const campo = ROTULOS.find(([re]) => re.test(rot))?.[1];
+    if (campo) cols.forEach((c, k) => { datos[k][campo] = (f[c] ?? '').trim(); });
+  }
+  const salida: string[][] = [[...COLUMNAS]];
+  cols.forEach((_, k) => {
+    const d = datos[k];
+    if (!d.nombre && !d.abreviatura) return; // columna vacía
+    d.costos_fijos = costos[k].fijo.join(' | ');
+    d.costos_variables = costos[k].variable.join(' | ');
+    salida.push(COLUMNAS.map((c) => d[c] ?? ''));
+  });
+  return salida;
+}
+
 export function interpretarFilas(filasCrudas: unknown[][]): FilaImportada[] {
   // Las celdas de Excel pueden llegar como número o vacías: todo se pasa a texto
-  const filas = filasCrudas
-    .map((f) => f.map((c) => (c == null ? '' : typeof c === 'number' ? String(c) : String(c))))
+  const filas0 = filasCrudas
+    .map((f) => f.map((c) => (c == null ? '' : String(c))));
+  const filas = (desdeFichaVertical(filas0) ?? filas0)
     .filter((f) => f.some((x) => x.trim() !== ''));
   if (!filas.length) return [];
   const encabezado = filas[0].map(sinTildes);
@@ -149,6 +191,7 @@ export function interpretarFilas(filasCrudas: unknown[][]): FilaImportada[] {
       tipo, nombre, abreviatura,
       categoria: val(f, 'categoria'),
       descripcion: val(f, 'descripcion'),
+      tiempo_estimado: val(f, 'tiempo_estimado'),
       incluye: val(f, 'incluye').split('|').map((x) => x.trim()).filter(Boolean).join('\n'),
       moneda,
       precio: Number.isFinite(precio) ? precio : 0,

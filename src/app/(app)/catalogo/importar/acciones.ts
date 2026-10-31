@@ -60,7 +60,7 @@ export async function importarServicios(filas: FilaImportada[]): Promise<Resulta
     const id = idPorAbrev.get(f.abreviatura);
     const { data, error } = await supabase.rpc('guardar_servicio', {
       p: {
-        id, tipo: f.tipo, nombre: f.nombre, abreviatura: f.abreviatura, descripcion: f.descripcion, incluye: f.incluye,
+        id, tipo: f.tipo, nombre: f.nombre, abreviatura: f.abreviatura, descripcion: f.descripcion, incluye: f.incluye, tiempo_estimado: f.tiempo_estimado,
         categoria_id, moneda: f.moneda, precio: f.precio, iva_pct: f.iva, forma_pago_id,
         beneficiario: f.beneficiario, recargo_gestion: f.recargo_gestion, activo: true,
         ...(f.costos.length ? { costos: f.costos } : {}),

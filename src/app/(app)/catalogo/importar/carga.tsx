@@ -1,6 +1,7 @@
 'use client';
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
+import readExcelFile from 'read-excel-file/browser';
 import { parsearCSV, interpretarFilas, COLUMNAS, type FilaImportada } from '@/lib/importacion';
 import { formatoMoneda } from '@/lib/precios';
 import { importarServicios, type ResultadoImportacion } from './acciones';
@@ -11,7 +12,7 @@ const AYUDA: Record<string, string> = {
   incluye: 'puntos separados por |',
   precio: 'IVA incluido; 1.190.000 o 1190000',
   iva: 'por defecto 19; terceros siempre 0',
-  forma_pago: 'nombre exacto de una forma de pago creada',
+  forma_pago: 'en palabras: «50% al aceptar + 50% a 30 días» (se crea sola) o el nombre de una ya creada',
   costos_fijos: 'Concepto:valor | Concepto:valor',
   costos_variables: 'Concepto:valor | Concepto:valor',
   aplica_a: 'para adicionales y terceros: abreviaturas de los principales (VA | VC)',
@@ -29,7 +30,14 @@ export function CargaCatalogo() {
     setResultado(null);
     if (!f) return;
     setArchivo(f.name);
-    setFilas(interpretarFilas(parsearCSV(await f.text())));
+    if (/\.xlsx$/i.test(f.name)) {
+      // Excel: se lee la hoja «Servicios» (o la primera)
+      const hojas = await readExcelFile(f);
+      const hoja = hojas.find((h) => /servicio/i.test(h.sheet)) ?? hojas[0];
+      setFilas(interpretarFilas((hoja?.data ?? []) as unknown[][]));
+    } else {
+      setFilas(interpretarFilas(parsearCSV(await f.text())));
+    }
   }
 
   const conError = filas?.filter((f) => f.errores.length) ?? [];
@@ -40,11 +48,14 @@ export function CargaCatalogo() {
       <section className="tarjeta space-y-3">
         <h2 className="text-base font-extrabold">1. Prepara el archivo</h2>
         <p className="text-sm">
-          Descarga la plantilla, ábrela en Excel, llena una fila por servicio y guárdala como <b>CSV (delimitado por punto y coma)</b>.
+          Descarga la plantilla de Excel, lee la hoja <b>Instrucciones</b>, llena una fila por servicio en la hoja <b>Servicios</b> y súbela tal cual (.xlsx). También se acepta CSV.
         </p>
         {/* Descarga de archivo, no navegación */}
         {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-        <a href="/catalogo/plantilla" download className="btn-secundario">Descargar plantilla</a>
+        <div className="flex flex-wrap gap-2">
+          <a href="/plantilla-catalogo-safe-bso.xlsx" download className="btn-primario">Descargar plantilla de Excel</a>
+          <a href="/catalogo/plantilla" download className="btn-secundario">Plantilla CSV</a>
+        </div>
         <details className="text-sm">
           <summary className="cursor-pointer font-semibold text-info">Ver columnas</summary>
           <ul className="mt-2 grid gap-1 sm:grid-cols-2">
@@ -55,8 +66,8 @@ export function CargaCatalogo() {
 
       <section className="tarjeta space-y-3">
         <h2 className="text-base font-extrabold">2. Sube el archivo</h2>
-        <label className="etiqueta" htmlFor="archivo">Archivo CSV</label>
-        <input id="archivo" type="file" accept=".csv,text/csv" onChange={leer} className="campo" />
+        <label className="etiqueta" htmlFor="archivo">Archivo de Excel (.xlsx) o CSV</label>
+        <input id="archivo" type="file" accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={leer} className="campo" />
         {archivo && filas && (
           <p className="text-sm">
             <b>{archivo}</b>: {filas.length} filas · <span className="text-ok font-bold">{validas.length} listas</span>
@@ -96,7 +107,7 @@ export function CargaCatalogo() {
       {resultado && (
         <section className="tarjeta space-y-2" role="status">
           <h2 className="text-base font-extrabold">Resultado</h2>
-          <p className="text-sm">{resultado.creados} creados · {resultado.actualizados} actualizados · {resultado.enlaces} adicionales enlazados</p>
+          <p className="text-sm">{resultado.creados} creados · {resultado.actualizados} actualizados · {resultado.enlaces} adicionales enlazados{resultado.formasCreadas.length > 0 && ` · formas de pago creadas: ${resultado.formasCreadas.join('; ')}`}</p>
           {resultado.avisos.length > 0 && <ul className="list-disc pl-5 text-sm text-alerta">{resultado.avisos.map((a) => <li key={a}>{a}</li>)}</ul>}
           {resultado.errores.length > 0 && <ul className="list-disc pl-5 text-sm text-peligro">{resultado.errores.map((a) => <li key={a}>{a}</li>)}</ul>}
           <Link href="/catalogo" className="btn-secundario">Ver catálogo</Link>

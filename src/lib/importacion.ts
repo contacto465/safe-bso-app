@@ -8,7 +8,7 @@ export const COLUMNAS = [
 
 export const PLANTILLA_CSV = [
   COLUMNAS.join(';'),
-  'principal;Visa Americana de turismo;VA;Visas EE. UU.;Asesoría completa para la visa B1/B2;Diligenciamiento DS-160|Agendamiento de cita|Preparación de entrevista;COP;1190000;19;Contado;Asesor:100000;Formulario:20000;;;',
+  'principal;Visa Americana de turismo;VA;Visas EE. UU.;Asesoría completa para la visa B1/B2;Diligenciamiento DS-160|Agendamiento de cita|Preparación de entrevista;COP;1190000;19;50% al aceptar + 50% a 30 días;Asesor:100000;Formulario:20000;;;',
   'adicional;Traducción oficial por página;TR;Documentos;;;COP;80000;19;Contado;;Traductor:45000;VA;;',
   'tercero;Tarifa MRV visa B1/B2;MRV;Visas EE. UU.;;;USD;185;0;;;;VA;Embajada de los Estados Unidos;20',
 ].join('\n');
@@ -25,12 +25,40 @@ export type FilaImportada = {
   precio: number;
   iva: number;
   forma_pago: string;
+  forma_pago_cuotas: CuotaImportada[] | null; // si se escribió en palabras («50% al aceptar + 50% a 30 días»)
   costos: { tipo: 'fijo' | 'variable'; concepto: string; valor: number }[];
   aplica_a: string[];
   beneficiario: string;
   recargo_gestion: number;
   errores: string[];
 };
+
+export type CuotaImportada = { numero: number; porcentaje: number; dias: number; descripcion: string };
+
+// Forma de pago escrita en palabras. Ejemplos válidos:
+//   «Contado» · «100% al aceptar» · «50% al aceptar + 50% a 30 días» · «40% al aceptar, 30% a 30 días, 30% a 60 días»
+// Si el texto no tiene «%», se toma como el nombre de una forma de pago ya creada en la app.
+export function leerFormaPago(texto: string): { cuotas: CuotaImportada[]; nombre: string } | { error: string } | null {
+  const t = texto.trim();
+  if (!t) return null;
+  if (/^(de\s+)?contado$/i.test(t)) return { nombre: 'Contado', cuotas: [{ numero: 1, porcentaje: 100, dias: 0, descripcion: 'Pago total' }] };
+  if (!t.includes('%')) return null;
+  const partes = t.split(/\s*(?:\+|,|;|\||\by\b)\s*/i).filter(Boolean);
+  const cuotas: CuotaImportada[] = [];
+  for (const p of partes) {
+    const m = p.match(/^(\d+(?:[.,]\d+)?)\s*%\s*(?:(al aceptar|al inicio|de anticipo|anticipo|inicial|al firmar)|a\s*(\d+)\s*d[ií]as?(?:\s*despu[eé]s)?)$/i);
+    if (!m) return { error: `No entendí «${p}» en la forma de pago. Escríbela como «50% al aceptar + 50% a 30 días».` };
+    cuotas.push({ numero: cuotas.length + 1, porcentaje: Number(m[1].replace(',', '.')), dias: m[2] ? 0 : Number(m[3]), descripcion: '' });
+  }
+  const total = cuotas.reduce((a, c) => a + c.porcentaje, 0);
+  if (Math.abs(total - 100) > 0.001) return { error: `Los porcentajes de la forma de pago suman ${total}% y deben sumar 100%.` };
+  cuotas.sort((a, b) => a.dias - b.dias).forEach((c, i, arr) => {
+    c.numero = i + 1;
+    c.descripcion = arr.length === 1 ? 'Pago total' : i === 0 && c.dias === 0 ? 'Anticipo' : i === arr.length - 1 ? 'Saldo' : `Cuota ${i + 1}`;
+  });
+  const nombre = cuotas.map((c) => `${c.porcentaje}% ${c.dias === 0 ? 'al aceptar' : `a ${c.dias} días`}`).join(' + ');
+  return { cuotas, nombre };
+}
 
 export function parsearCSV(texto: string): string[][] {
   const limpio = texto.replace(/^﻿/, '').replace(/\r\n?/g, '\n');
@@ -82,7 +110,11 @@ function leerCostos(v: string, tipo: 'fijo' | 'variable', errores: string[]) {
   });
 }
 
-export function interpretarFilas(filas: string[][]): FilaImportada[] {
+export function interpretarFilas(filasCrudas: unknown[][]): FilaImportada[] {
+  // Las celdas de Excel pueden llegar como número o vacías: todo se pasa a texto
+  const filas = filasCrudas
+    .map((f) => f.map((c) => (c == null ? '' : typeof c === 'number' ? String(c) : String(c))))
+    .filter((f) => f.some((x) => x.trim() !== ''));
   if (!filas.length) return [];
   const encabezado = filas[0].map(sinTildes);
   const idx = Object.fromEntries(COLUMNAS.map((c) => [c, encabezado.indexOf(c)]));
@@ -109,6 +141,9 @@ export function interpretarFilas(filas: string[][]): FilaImportada[] {
     let iva = tipo === 'tercero' ? 0 : ivaTxt === '' ? 19 : leerNumero(ivaTxt.replace('%', ''));
     if (!Number.isFinite(iva) || iva < 0 || iva > 100) { errores.push('IVA no válido'); iva = 0; }
     const recargo = leerNumero(val(f, 'recargo_gestion'));
+    const fp = leerFormaPago(val(f, 'forma_pago'));
+    if (fp && 'error' in fp) errores.push(fp.error);
+    const formaOk = fp && !('error' in fp) ? fp : null;
     return {
       linea: i + 2,
       tipo, nombre, abreviatura,
@@ -118,7 +153,8 @@ export function interpretarFilas(filas: string[][]): FilaImportada[] {
       moneda,
       precio: Number.isFinite(precio) ? precio : 0,
       iva,
-      forma_pago: val(f, 'forma_pago'),
+      forma_pago: formaOk ? formaOk.nombre : val(f, 'forma_pago'),
+      forma_pago_cuotas: formaOk ? formaOk.cuotas : null,
       costos: [...leerCostos(val(f, 'costos_fijos'), 'fijo', errores), ...leerCostos(val(f, 'costos_variables'), 'variable', errores)],
       aplica_a: val(f, 'aplica_a').split(/[|,;\s]+/).map((x) => x.toUpperCase()).filter(Boolean),
       beneficiario: val(f, 'beneficiario'),

@@ -8,6 +8,7 @@ export type ResultadoImportacion = {
   creados: number;
   actualizados: number;
   enlaces: number;
+  formasCreadas: string[];
   avisos: string[];
   errores: string[];
 };
@@ -17,7 +18,7 @@ const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCa
 export async function importarServicios(filas: FilaImportada[]): Promise<ResultadoImportacion> {
   await requerirAdmin();
   const supabase = await createClient();
-  const r: ResultadoImportacion = { creados: 0, actualizados: 0, enlaces: 0, avisos: [], errores: [] };
+  const r: ResultadoImportacion = { creados: 0, actualizados: 0, enlaces: 0, formasCreadas: [], avisos: [], errores: [] };
   const validas = filas.filter((f) => f.errores.length === 0);
   if (validas.length > 500) return { ...r, errores: ['Máximo 500 filas por archivo.'] };
 
@@ -45,7 +46,14 @@ export async function importarServicios(filas: FilaImportada[]): Promise<Resulta
     let forma_pago_id: string | undefined;
     if (f.forma_pago) {
       forma_pago_id = formaPorNombre.get(norm(f.forma_pago));
-      if (!forma_pago_id) r.avisos.push(`Línea ${f.linea} (${f.abreviatura}): la forma de pago "${f.forma_pago}" no existe; créala y asígnala.`);
+      // Forma escrita en palabras que aún no existe: se crea
+      if (!forma_pago_id && f.forma_pago_cuotas) {
+        const { data, error } = await supabase.from('formas_pago')
+          .insert({ nombre: f.forma_pago, descripcion: 'Creada desde la carga del catálogo', cuotas: f.forma_pago_cuotas }).select('id').single();
+        if (error) r.errores.push(`Línea ${f.linea}: forma de pago — ${mensajeError(error)}`);
+        else { forma_pago_id = data.id as string; formaPorNombre.set(norm(f.forma_pago), forma_pago_id); r.formasCreadas.push(f.forma_pago); }
+      }
+      if (!forma_pago_id && !f.forma_pago_cuotas) r.avisos.push(`Línea ${f.linea} (${f.abreviatura}): la forma de pago "${f.forma_pago}" no existe; créala y asígnala.`);
     } else if (f.tipo !== 'tercero') {
       r.avisos.push(`Línea ${f.linea} (${f.abreviatura}): sin forma de pago.`);
     }

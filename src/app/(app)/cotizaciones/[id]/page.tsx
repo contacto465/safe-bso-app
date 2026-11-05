@@ -22,11 +22,12 @@ export default async function VerCotizacion({ params, searchParams }: { params: 
     .select('*, clientes(nombres, apellidos, documento, celular), empresas(razon_social, nit), oficinas(nombre, ciudad, direccion, telefono, correo), cotizacion_items(*)')
     .eq('id', id).maybeSingle();
   if (!c) notFound();
-  const [{ data: emisor }, { data: medios }, { data: terminos }, { data: versiones }] = await Promise.all([
+  const [{ data: emisor }, { data: medios }, { data: terminos }, { data: versiones }, { data: venta }] = await Promise.all([
     supabase.from('empresa').select('razon_social, nit').eq('id', 1).maybeSingle(),
     supabase.from('medios_pago').select('nombre, instrucciones, oficina_id, orden').eq('activo', true).order('orden'),
     supabase.from('configuracion').select('valor').eq('clave', 'terminos_cotizacion').maybeSingle(),
     supabase.from('cotizacion_versiones').select('version, motivo, creado_en').eq('cotizacion_id', id).order('version', { ascending: false }),
+    supabase.from('ventas').select('id').eq('cotizacion_id', id).maybeSingle(),
   ]);
   const cl = c.clientes as { nombres: string; apellidos: string; documento: string | null; celular: string | null };
   const items = (c.cotizacion_items as Record<string, unknown>[]).sort((a, b) => n(a.orden) - n(b.orden));
@@ -57,7 +58,7 @@ export default async function VerCotizacion({ params, searchParams }: { params: 
         <div className="space-y-4">
           {guardada && <div className="print:hidden"><Aviso tipo="ok">Cotización guardada en borrador. Revísala y márcala como enviada para compartirla.</Aviso></div>}
           {c.respuesta_comentario && <div className="print:hidden"><Aviso tipo={c.estado === 'aceptada' ? 'ok' : 'info'}>Comentario: {c.respuesta_comentario}</Aviso></div>}
-          <AccionesCotizacion id={c.id} estado={c.estado} enlace={enlace} celular={cl.celular} consecutivo={c.consecutivo} nombre={cl.nombres.split(' ')[0]} />
+          <AccionesCotizacion id={c.id} estado={c.estado} enlace={enlace} celular={cl.celular} consecutivo={c.consecutivo} nombre={cl.nombres.split(' ')[0]} ventaId={venta?.id ?? null} />
           <DocumentoCotizacion d={d} />
         </div>
         <aside className="space-y-4 print:hidden">

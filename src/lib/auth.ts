@@ -63,6 +63,13 @@ export async function requerirAdmin(): Promise<Sesion> {
   return s;
 }
 
+// Admin o Finanzas (costos, utilidad, acreedores)
+export async function requerirCostos(): Promise<Sesion> {
+  const s = await requerirSesion();
+  if (!s.veCostos) redirect('/?aviso=solo-finanzas');
+  return s;
+}
+
 export async function requerirAdminGeneral(): Promise<Sesion> {
   const s = await requerirSesion();
   if (!s.esAdminGeneral) redirect('/?aviso=solo-administrador-general');

@@ -24,7 +24,8 @@ async function guardarOficinas(usuarioId: string, alcance: string) {
   }
 }
 
-// Invita a un usuario: recibe un correo para definir su contraseña y luego activa la verificación en dos pasos.
+// Invita a un usuario: recibe un correo y con abrir el enlace entra (sin contraseña); luego activa la verificación en dos pasos.
+// Después ingresa siempre con «Enviarme el enlace de acceso» en la pantalla de ingreso.
 export async function invitarUsuario(_: unknown, fd: FormData): Promise<Res> {
   await requerirAdminGeneral();
   const r = esquema.safeParse(Object.fromEntries(fd));
@@ -57,7 +58,7 @@ export async function invitarUsuario(_: unknown, fd: FormData): Promise<Res> {
   }
   try { await guardarOficinas(data.user.id, r.data.alcance); } catch (e) { return { error: (e as Error).message }; }
   revalidatePath('/configuracion/usuarios');
-  return { ok: `Invitación enviada a ${r.data.correo}.` };
+  return { ok: `Invitación enviada a ${r.data.correo}. Con abrir el enlace del correo entra; no necesita contraseña.` };
 }
 
 export async function actualizarUsuario(_: unknown, fd: FormData): Promise<Res> {

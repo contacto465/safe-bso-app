@@ -15,7 +15,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen flex-col lg:flex-row">
-      <MenuLateral esAdminGeneral={s.esAdminGeneral} />
+      <MenuLateral esAdminGeneral={s.esAdminGeneral} esAdmin={s.esAdmin} veCostos={s.veCostos} />
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-borde bg-superficie px-5 py-3 lg:px-8">
           <div className="text-sm">

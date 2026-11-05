@@ -293,4 +293,110 @@ await t('Reenviar → vigente de nuevo y el cliente la acepta', async () => {
   await falla(como(U.mauro, (tx) => tx.query(`select guardar_cotizacion($1::jsonb)`, [JSON.stringify({ id: cot, oficina_id: BOG, cliente_id: cli, items: [{ servicio_id: '00000000-0000-0000-0000-000000000000' }] })])), /no se puede editar/);
 });
 
+console.log('Ventas, abonos y cartera (fase 3)');
+let venta, ventaManual;
+await t('la cotización aceptada se convierte en venta con su plan de pagos', async () => {
+  venta = await como(U.mauro, async (tx) => (await tx.query(`select venta_desde_cotizacion($1) id`, [cot])).rows[0].id);
+  const v = (await db.query(`select * from ventas_saldo where id=$1`, [venta])).rows[0];
+  const c = (await db.query(`select consecutivo, total from cotizaciones where id=$1`, [cot])).rows[0];
+  assert.equal(v.numero, c.consecutivo); assert.equal(Number(v.total), Number(c.total)); assert.equal(Number(v.saldo), Number(c.total));
+  const cu = (await db.query(`select sum(valor) s from venta_cuotas where venta_id=$1`, [venta])).rows[0];
+  assert.equal(Number(cu.s), Number(c.total));
+  // repetirlo no crea otra venta
+  const otra = await como(U.mauro, async (tx) => (await tx.query(`select venta_desde_cotizacion($1) id`, [cot])).rows[0].id);
+  assert.equal(otra, venta);
+});
+await t('venta manual con honorarios y derechos consulares, en 2 cuotas', async () => {
+  ventaManual = await como(U.mauro, async (tx) => (await tx.query(`select crear_venta($1::jsonb) id`, [JSON.stringify({
+    oficina_id: BOG, cliente_id: cli, descripcion: 'Renovación premium', honorarios: 600000, terceros: 1280000, aplicantes: 2,
+    cuotas: [{ descripcion: 'Honorarios', fecha: '2026-11-04', valor: 600000 }, { descripcion: 'Derechos consulares', fecha: '2026-12-04', valor: 1280000 }] })])).rows[0].id);
+  const v = (await db.query(`select numero, total, saldo, proxima_cuota from ventas_saldo where id=$1`, [ventaManual])).rows[0];
+  assert.match(v.numero, /^BOG-\d{3}-VTA-MARIAC/); assert.equal(Number(v.total), 1880000);
+});
+await t('abono parcial: primero honorarios, luego terceros; fondo 10% sobre honorarios sin IVA', async () => {
+  const transf = (await db.query(`select id from medios_pago where nombre='Transferencia bancaria'`)).rows[0].id;
+  await como(U.bog, (tx) => tx.query(`select registrar_abono($1::jsonb)`, [JSON.stringify({ venta_id: ventaManual, valor: 800000, medio_id: transf })]));
+  const a = (await db.query(`select a_honorarios, a_terceros, fondo_incentivos from abonos where venta_id=$1`, [ventaManual])).rows[0];
+  assert.equal(Number(a.a_honorarios), 600000); assert.equal(Number(a.a_terceros), 200000);
+  assert.equal(Number(a.fondo_incentivos), Math.round(600000 / 1.19 * 0.1));
+  const v = (await db.query(`select saldo, estado, proxima_cuota from ventas_saldo where id=$1`, [ventaManual])).rows[0];
+  assert.equal(Number(v.saldo), 1080000); assert.equal(v.estado, 'activa');
+  assert.equal(new Date(v.proxima_cuota).toISOString().slice(0, 10), '2026-12-04');
+});
+await t('no se puede abonar más del saldo', () =>
+  falla(como(U.mauro, (tx) => tx.query(`select registrar_abono($1::jsonb)`, [JSON.stringify({ venta_id: ventaManual, valor: 2000000 })])), /supera el saldo/));
+await t('al completar el saldo la venta queda pagada', async () => {
+  await como(U.mauro, (tx) => tx.query(`select registrar_abono($1::jsonb)`, [JSON.stringify({ venta_id: ventaManual, valor: 1080000, medio: 'Efectivo' })]));
+  assert.equal((await db.query(`select estado from ventas where id=$1`, [ventaManual])).rows[0].estado, 'pagada');
+});
+await t('el vendedor no puede anular abonos; Admin sí, con motivo, y la venta vuelve a activa', async () => {
+  const ab = (await db.query(`select id from abonos where venta_id=$1 order by creado_en desc limit 1`, [ventaManual])).rows[0].id;
+  await falla(como(U.bog, (tx) => tx.query(`select anular_abono($1,'x')`, [ab])), /Solo Admin o Finanzas/);
+  await falla(como(U.mauro, (tx) => tx.query(`select anular_abono($1,'')`, [ab])), /motivo/);
+  await como(U.mauro, (tx) => tx.query(`select anular_abono($1,'Error de digitación')`, [ab]));
+  assert.equal((await db.query(`select estado from ventas where id=$1`, [ventaManual])).rows[0].estado, 'activa');
+});
+await t('los abonos no se pueden borrar', async () => {
+  await como(U.mauro, (tx) => tx.query(`delete from abonos where venta_id=$1`, [ventaManual]));
+  assert.ok((await db.query(`select count(*)::int n from abonos where venta_id=$1`, [ventaManual])).rows[0].n >= 2);
+});
+await t('Barranquilla no ve ventas ni abonos de Bogotá', async () => {
+  const r = await como(U.baq, (tx) => tx.query(`select count(*)::int n from ventas_saldo`));
+  assert.equal(r.rows[0].n, 0);
+  await falla(como(U.baq, (tx) => tx.query(`select registrar_abono($1::jsonb)`, [JSON.stringify({ venta_id: ventaManual, valor: 1000 })])), /no encontrada/);
+});
+
+console.log('Acreedores');
+let deudaBog, deudaRep, deudaGen;
+await t('deuda de Bogotá (100%), repartida 70/30 y general', async () => {
+  await como(U.mauro, async (tx) => {
+    deudaBog = (await tx.query(`select guardar_deuda($1::jsonb) id`, [JSON.stringify({ acreedor: 'Bancolombia', saldo_inicial: 14500000, tasa_pct: 1.6, asignacion: 'oficina', oficina_id: BOG })])).rows[0].id;
+    deudaRep = (await tx.query(`select guardar_deuda($1::jsonb) id`, [JSON.stringify({ acreedor: 'Socio', tipo: 'Socio', saldo_inicial: 10000000, asignacion: 'repartida', reparto: [{ oficina_id: BOG, pct: 70 }, { oficina_id: BAQ, pct: 30 }] })])).rows[0].id;
+    deudaGen = (await tx.query(`select guardar_deuda($1::jsonb) id`, [JSON.stringify({ acreedor: 'Tarjeta empresarial', tipo: 'Tarjeta de crédito', saldo_inicial: 3000000, asignacion: 'general' })])).rows[0].id;
+  });
+  assert.equal((await db.query(`select count(*)::int n from deuda_reparto where deuda_id=$1`, [deudaRep])).rows[0].n, 2);
+});
+await t('el reparto debe sumar 100%', () =>
+  falla(como(U.mauro, (tx) => tx.query(`select guardar_deuda($1::jsonb)`, [JSON.stringify({ acreedor: 'X', saldo_inicial: 1, asignacion: 'repartida', reparto: [{ oficina_id: BOG, pct: 60 }] })])), /sumar 100/));
+await t('Barranquilla (Finanzas) solo ve la deuda repartida; el vendedor no ve acreedores', async () => {
+  const r = await como(U.baq, (tx) => tx.query(`select acreedor from deudas_saldo order by acreedor`));
+  assert.deepEqual(r.rows.map((x) => x.acreedor), ['Socio']);
+  const v = await como(U.bog, (tx) => tx.query(`select count(*)::int n from deudas_saldo`));
+  assert.equal(v.rows[0].n, 0);
+  await falla(como(U.baq, (tx) => tx.query(`select guardar_deuda($1::jsonb)`, [JSON.stringify({ acreedor: 'Y', saldo_inicial: 1, asignacion: 'general' })])), /deudas generales/);
+});
+await t('pago de deuda: el capital baja el saldo y los intereses quedan aparte', async () => {
+  await como(U.mauro, (tx) => tx.query(`select registrar_pago_deuda($1::jsonb)`, [JSON.stringify({ deuda_id: deudaBog, capital: 818000, intereses: 232000, oficina_pago_id: BOG })]));
+  const d = (await db.query(`select saldo, intereses_pagados from deudas_saldo where id=$1`, [deudaBog])).rows[0];
+  assert.equal(Number(d.saldo), 14500000 - 818000); assert.equal(Number(d.intereses_pagados), 232000);
+  await falla(como(U.mauro, (tx) => tx.query(`select registrar_pago_deuda($1::jsonb)`, [JSON.stringify({ deuda_id: deudaBog, capital: 99000000 })])), /supera el saldo/);
+});
+await t('Barranquilla no puede pagar ni ver la deuda de Bogotá', () =>
+  falla(como(U.baq, (tx) => tx.query(`select registrar_pago_deuda($1::jsonb)`, [JSON.stringify({ deuda_id: deudaBog, capital: 1 })])), /no encontrada/));
+
+console.log('Carga inicial');
+await t('importa deudas, pagos, ventas (creando clientes) y abonos de una vez', async () => {
+  const r = await como(U.mauro, async (tx) => (await tx.query(`select importar_carga_inicial($1::jsonb) r`, [JSON.stringify({
+    fecha_corte: '2026-11-01',
+    deudas: [{ acreedor: 'Davivienda', tipo: 'Banco', saldo_inicial: 5000000, asignacion: 'oficina', oficina: 'BOG' }],
+    pagos_deudas: [{ acreedor: 'davivienda', fecha: '2026-11-05', capital: 400000, intereses: 80000, oficina: 'BOG' }],
+    ventas: [{ ref: '1', fecha: '2026-11-03', oficina: 'BOG', nombres: 'Ricardo', apellidos: 'Chaparro', celular: '311 514 4466', servicio: 'VA', honorarios: 597600, terceros: 1280000 },
+             { ref: '2', fecha: '2026-11-04', oficina: 'BAQ', nombres: 'Ana', apellidos: 'Pérez', correo: 'ana@x.co', honorarios: 300000 }],
+    abonos: [{ ref: '1', fecha: '2026-11-03', valor: 597600, medio: 'Transferencia' }, { ref: '2', valor: 100000 }],
+  })])).rows[0].r);
+  assert.deepEqual(r, { deudas: 1, pagos_deudas: 1, ventas: 2, clientes_nuevos: 2, abonos: 2 });
+  const v = (await db.query(`select numero, saldo from ventas_saldo where referencia_externa='1'`)).rows[0];
+  assert.match(v.numero, /^BOG-307-VA-RICARDOC/); assert.equal(Number(v.saldo), 1280000);
+  assert.equal((await db.query(`select valor #>> '{}' f from configuracion where clave='fecha_corte'`)).rows[0].f, '2026-11-01');
+});
+await t('si una fila falla no se carga nada e indica hoja y fila', async () => {
+  const antes = (await db.query(`select count(*)::int n from ventas`)).rows[0].n;
+  await falla(como(U.mauro, (tx) => tx.query(`select importar_carga_inicial($1::jsonb)`, [JSON.stringify({
+    ventas: [{ ref: '9', oficina: 'BOG', nombres: 'Luis', apellidos: 'Gómez', honorarios: 100000 }],
+    abonos: [{ ref: '9', valor: 500000 }] })])), /Hoja Abonos, fila 2: .*supera el saldo/);
+  assert.equal((await db.query(`select count(*)::int n from ventas`)).rows[0].n, antes);
+});
+await t('solo un administrador hace la carga inicial', () =>
+  falla(como(U.baq, (tx) => tx.query(`select importar_carga_inicial('{}'::jsonb)`)), /Solo un administrador/));
+
 console.log(`\n${ok} pruebas superadas`);

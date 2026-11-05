@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { GRUPOS } from '@/lib/modulos';
 
-export function MenuLateral({ esAdminGeneral }: { esAdminGeneral: boolean }) {
+export function MenuLateral({ esAdminGeneral, esAdmin, veCostos }: { esAdminGeneral: boolean; esAdmin: boolean; veCostos: boolean }) {
   const path = usePathname();
   const [abierto, setAbierto] = useState(false);
   const activo = (href: string) => (href === '/' ? path === '/' : path === href || path.startsWith(href + '/'));
@@ -31,7 +31,7 @@ export function MenuLateral({ esAdminGeneral }: { esAdminGeneral: boolean }) {
       </div>
       <div id="menu-modulos" className={`${abierto ? 'block' : 'hidden'} space-y-4 px-3 pb-8 lg:block`}>
         {GRUPOS.map((g) => {
-          const mods = g.modulos.filter((m) => !m.soloAdminGeneral || esAdminGeneral);
+          const mods = g.modulos.filter((m) => (!m.soloAdminGeneral || esAdminGeneral) && (!m.soloAdmin || esAdmin) && (!m.soloCostos || veCostos));
           if (!mods.length) return null;
           return (
             <div key={g.nombre}>

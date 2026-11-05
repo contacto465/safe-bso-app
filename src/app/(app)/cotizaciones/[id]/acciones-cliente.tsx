@@ -2,9 +2,10 @@
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { enviarCotizacion, actualizarCotizacion, anularCotizacion } from '../acciones';
+import { ventaDesdeCotizacion } from '../../ventas/acciones';
 
-export function AccionesCotizacion({ id, estado, enlace, celular, consecutivo, nombre }: {
-  id: string; estado: string; enlace: string; celular: string | null; consecutivo: string; nombre: string;
+export function AccionesCotizacion({ id, estado, enlace, celular, consecutivo, nombre, ventaId }: {
+  id: string; estado: string; enlace: string; celular: string | null; consecutivo: string; nombre: string; ventaId?: string | null;
 }) {
   const [msg, setMsg] = useState<{ error?: string; ok?: string } | null>(null);
   const [copiado, setCopiado] = useState(false);
@@ -19,6 +20,10 @@ export function AccionesCotizacion({ id, estado, enlace, celular, consecutivo, n
   return (
     <section className="tarjeta space-y-3 print:hidden">
       <div className="flex flex-wrap gap-2">
+        {estado === 'aceptada' && (ventaId
+          ? <Link href={`/ventas/${ventaId}`} className="btn-primario">Ver la venta</Link>
+          : <button type="button" className="btn-primario" disabled={pendiente}
+              onClick={() => ejecutar(() => ventaDesdeCotizacion(id), 'Venta creada.')}>Convertir en venta</button>)}
         {editable && (
           <button type="button" className="btn-primario" disabled={pendiente}
             onClick={() => ejecutar(() => enviarCotizacion(id), 'Marcada como enviada. Vigente desde hoy. Comparte el enlace con el cliente.')}>

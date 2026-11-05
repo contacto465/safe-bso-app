@@ -8,6 +8,8 @@ export type Modulo = {
   fase: number;
   disponible?: boolean;
   soloAdminGeneral?: boolean;
+  soloAdmin?: boolean;
+  soloCostos?: boolean; // Admin y Finanzas
 };
 export type GrupoModulos = { nombre: string; modulos: Modulo[] };
 
@@ -22,7 +24,7 @@ export const GRUPOS: GrupoModulos[] = [
       { id: 'documentos', nombre: 'Documentos y fechas', href: '/documentos', fase: 6 },
       { id: 'cotizaciones', disponible: true, nombre: 'Cotizaciones y prefacturas', href: '/cotizaciones', fase: 2 },
       { id: 'contratos', nombre: 'Contratos', href: '/contratos', fase: 2 },
-      { id: 'ventas', nombre: 'Ventas', href: '/ventas', fase: 3 },
+      { id: 'ventas', disponible: true, nombre: 'Ventas', href: '/ventas', fase: 3 },
       { id: 'metas', nombre: 'Metas de ventas', href: '/metas', fase: 7 },
       { id: 'seguimiento', nombre: 'Seguimiento', href: '/seguimiento', fase: 5 },
       { id: 'satisfaccion', nombre: 'Satisfacción y referidos', href: '/satisfaccion', fase: 5 },
@@ -31,7 +33,7 @@ export const GRUPOS: GrupoModulos[] = [
   {
     nombre: 'Dinero que entra',
     modulos: [
-      { id: 'abonos', nombre: 'Abonos y cartera', href: '/abonos', fase: 3 },
+      { id: 'abonos', disponible: true, nombre: 'Abonos y cartera', href: '/abonos', fase: 3 },
       { id: 'terceros', nombre: 'Pagos a embajadas', href: '/terceros', fase: 3 },
       { id: 'devoluciones', nombre: 'Devoluciones', href: '/devoluciones', fase: 3 },
       { id: 'fondo', nombre: 'Fondo 10%', href: '/fondo', fase: 3 },
@@ -49,7 +51,7 @@ export const GRUPOS: GrupoModulos[] = [
   {
     nombre: 'Acreedores (lo que debemos)',
     modulos: [
-      { id: 'acreedores', nombre: 'Acreedores', href: '/acreedores', fase: 4 },
+      { id: 'acreedores', disponible: true, soloCostos: true, nombre: 'Deudas y acreedores', href: '/acreedores', fase: 4 },
       { id: 'calendario', nombre: 'Calendario de pagos', href: '/calendario-pagos', fase: 4 },
     ],
   },
@@ -72,6 +74,7 @@ export const GRUPOS: GrupoModulos[] = [
   {
     nombre: 'Configuración',
     modulos: [
+      { id: 'carga', disponible: true, soloAdmin: true, nombre: 'Carga inicial (Excel)', href: '/configuracion/carga-inicial', fase: 3 },
       { id: 'catalogo', nombre: 'Catálogo de servicios', href: '/catalogo', fase: 1, disponible: true },
       { id: 'formas', nombre: 'Formas de pago', href: '/configuracion/formas-pago', fase: 1, disponible: true },
       { id: 'medios', nombre: 'Métodos de pago y tarifas', href: '/configuracion/medios-pago', fase: 1, disponible: true },
